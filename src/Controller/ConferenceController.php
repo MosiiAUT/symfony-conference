@@ -22,7 +22,6 @@ class ConferenceController extends AbstractController
     public function __construct(
         #[Autowire("%kernel.project_dir%/public/uploads/photos")]
         private string $photoDir,
-        private EntityManagerInterface $em,
         private MessageBusInterface $bus
     ) {  
     }
@@ -32,9 +31,16 @@ class ConferenceController extends AbstractController
     {
         return $this->render('conference/index.html.twig', [
             'conferences' => $conferences->findAll(),
-        ]);
+        ])->setSharedMaxAge(60);
     }
 
+    #[Route('/conference_header', name: 'conference_header')]
+    public function conferenceHeader(ConferenceRepository $conferenceRepository): Response
+    {
+        return new Response($this->render('conference/header.html.twig', [
+            'conferences' => $conferenceRepository->findAll(),
+        ])->setSharedMaxAge(60));
+    }
     #[Route('/conference/{slug}', name: 'conference')]
     public function show(Request $request, Conference $conference, CommentRepository $commentRepository): Response
     {

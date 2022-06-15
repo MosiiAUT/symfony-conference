@@ -7,12 +7,16 @@ use App\Repository\CommentRepository;
 use App\SpamChecker;
 use Doctrine\ORM\EntityManagerInterface;
 use Psr\Log\LoggerInterface;
-use Symfony\Component\Messenger\Handler\MessageHandlerInterface;
+use Symfony\Bridge\Twig\Mime\NotificationEmail;
+use Symfony\Component\Mailer\MailerInterface;
+use Symfony\Component\Messenger\Attribute\AsMessageHandler;
 use Symfony\Component\Messenger\MessageBusInterface;
-use Symfony\Component\Workflow\Workflow;
 use Symfony\Component\DependencyInjection\Attribute\Target;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
+use Symfony\Component\Workflow\WorkflowInterface;
 
-class CommentMessageHandler implements MessageHandlerInterface
+#[AsMessageHandler()]
+class CommentMessageHandler
 {
     public function __construct(
         private EntityManagerInterface $entityManager,
@@ -20,8 +24,11 @@ class CommentMessageHandler implements MessageHandlerInterface
         private CommentRepository      $commentRepository,
         private MessageBusInterface    $bus,
         #[Target('comment.state_machine')]
-        private Workflow               $workflow,
-        private LoggerInterface        $logger
+        private WorkflowInterface               $workflow,
+        private LoggerInterface        $logger,
+        private MailerInterface $mailer,
+        #[Autowire('%default_admin_email%')]
+        private string $adminEmail
     )
     {
     }
@@ -45,9 +52,13 @@ class CommentMessageHandler implements MessageHandlerInterface
 
             $this->bus->dispatch($message);
         } elseif ($this->workflow->can($comment, 'publish') || $this->workflow->can($comment, 'publish_ham')) {
-            $this->workflow->apply($comment, $this->workflow->can($comment, 'publish') ? 'publish' : 'publish_ham');
-            $this->entityManager->flush();
-        } elseif ($this->logger) {
+            $this->mailer->send((new NotificationEmail())
+                ->subject('New comment posted')
+                ->htmlTemplate('emails/comment_notification.html.twig')
+                ->from($this->adminEmail)
+                ->to($this->adminEmail)
+                ->context(['comment' => $comment])
+            );        } elseif ($this->logger) {
             $this->logger->debug('Dropping comment message', ['comment' => $comment->getId(), 'state' => $comment->getState()]);
         }
         $this->entityManager->flush();
