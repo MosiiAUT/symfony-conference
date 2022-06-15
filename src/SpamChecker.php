@@ -4,19 +4,17 @@ namespace App;
 
 use App\Entity\Comment;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
+use Symfony\Component\DependencyInjection\Attribute\Target;
 use Symfony\Contracts\HttpClient\HttpClientInterface;
 
 class SpamChecker
 {
-    private $endpoint;
-
+//            private HttpClientInterface $akismetClient
     public function __construct(
-        private HttpClientInterface $client,
-        #[Autowire('%env(AKISMET_KEY)%')]
-        string $akismetKey)
+        #[Target('akismet.client')]
+        private HttpClientInterface $clients
+        )
     {
-        $this->client = $client;
-        $this->endpoint = sprintf('https://%s.rest.akismet.com/1.1/comment-check', $akismetKey);
     }
 
     /**
@@ -26,7 +24,7 @@ class SpamChecker
      */
     public function getSpamScore(Comment $comment, array $context): int
     {
-        $response = $this->client->request('POST', $this->endpoint, [
+        $response = $this->clients->request('POST', '/1.1/comment-check', [
             'body' => array_merge($context, [
                 'blog' => 'https://guestbook.example.com',
                 'comment_type' => 'comment',
